@@ -1,0 +1,24 @@
+# Shared plot style: Computer Modern fonts (LaTeX look) without needing a LaTeX install.
+# Load with: plt.style.use("<repo>/latex.mplstyle")
+font.family          : serif
+font.serif           : cmr10, Computer Modern Roman, DejaVu Serif
+mathtext.fontset     : cm
+axes.formatter.use_mathtext : True
+axes.unicode_minus   : False
+
+font.size            : 13
+axes.labelsize       : 14
+legend.fontsize      : 13
+xtick.labelsize      : 12
+ytick.labelsize      : 12
+
+lines.linewidth      : 2.0
+lines.markersize     : 6
+axes.grid            : True
+grid.alpha           : 0.3
+legend.frameon       : False
+
+figure.figsize       : 7.0, 2.8    # width:height = 10:4
+savefig.bbox         : tight
+savefig.pad_inches   : 0.02
+pdf.fonttype         : 42
