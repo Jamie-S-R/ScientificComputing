@@ -115,22 +115,94 @@ def main():
     for (N, n, itc, tc, _), (_, _, itp, tp, _) in zip(results["CG"], results["SSOR-PCG"]):
         print(f"{n:>7} | {itc:>6} {tc:>10.3f} | {itp:>6} {tp:>11.3f}")
 
-    # ---------- Plot ----------
-    # Stacked panels with a common k-axis, each panel keeps the 10:4 aspect ratio
-    fig, axes = plt.subplots(2, 1, sharex=True, sharey=True, figsize=(7.0, 5.6))
-    for ax, name, tag in zip(axes, methods, "ab"):
+    # ---------- Plots ----------
+    # One figure per method, same size and same axis limits so that they can be
+    # compared side by side (subfigures (a) CG, (b) SSOR-PCG in the report).
+    k_max = max(len(h) - 1 for res in results.values() for *_, h in res)
+    files = {"CG": "cg_convergence.pdf", "SSOR-PCG": "pcg_ssor_convergence.pdf"}
+    for name in methods:
+        fig, ax = plt.subplots(figsize=(7.0, 2.3))
         for N, n, _, _, hist in results[name]:
             (line,) = ax.semilogy(hist, label=rf"$N={N},\ n={n}$")
             ax.plot(len(hist) - 1, hist[-1], "o", color=line.get_color())  # converged iterate
         ax.axhline(TOL, color="k", ls=":", lw=1)
-        ax.set_title(f"({tag}) {name}")
-        ax.set_ylabel(r"$\|\mathbf{r}^k\|_2/\|\mathbf{f}^h\|_2$")
-    axes[-1].set_xlabel(r"$k$")
-    axes[1].legend(fontsize=10, loc="center right", title=r"$n=(N+1)^2$", title_fontsize=10)
-    out = os.path.join(FIG_DIR, "cg_pcg_convergence.pdf")
+        ax.set_xlim(-0.02 * k_max, 1.02 * k_max)
+        ax.set_ylim(TOL / 5, 2.0)
+        ax.set_xlabel(r"$k$")
+        ax.set_ylabel(r"$\dfrac{\|\mathbf{r}^k\|_2}{\|\mathbf{f}^h\|_2}$",
+                      rotation=0, ha="right", va="center")
+        if name == "SSOR-PCG":
+            ax.legend(fontsize=10, loc="center right", title=r"$n=(N+1)^2$", title_fontsize=10)
+        out = os.path.join(FIG_DIR, files[name])
+        fig.savefig(out)
+        plt.close(fig)
+        print(f"Figure saved to {os.path.normpath(out)}")
+
+    # ---------- Iterations vs mesh size, and CG/PCG ratio ----------
+    Ns = np.array([r[0] for r in results["CG"]])
+    K_cg = np.array([r[2] for r in results["CG"]])
+    K_pcg = np.array([r[2] for r in results["SSOR-PCG"]])
+
+    fig, ax = plt.subplots(figsize=(4.0, 2.6))
+    ax.loglog(Ns, K_cg, "o-", label="CG")
+    ax.loglog(Ns, K_pcg, "s-", label="SSOR-PCG")
+    ax.loglog(Ns, K_cg[-1] * Ns / Ns[-1], "k--", lw=1, label=r"$\mathcal{O}(N)$")
+    ax.loglog(Ns, K_pcg[-1] * Ns / Ns[-1], "k--", lw=1)
+    ax.set_xticks(Ns, [str(N) for N in Ns])
+    ax.minorticks_off()
+    ax.set_xlabel(r"$N=1/h$")
+    ax.set_ylabel(r"$K$", rotation=0, ha="right", va="center")
+    ax.legend(fontsize=10)
+    out = os.path.join(FIG_DIR, "iterations_vs_N.pdf")
     fig.savefig(out)
+    plt.close(fig)
     print(f"Figure saved to {os.path.normpath(out)}")
 
+    fig, ax = plt.subplots(figsize=(4.0, 2.6))
+    ax.semilogx(Ns, K_cg / K_pcg, "o-", color="C2")
+    for N, ratio in zip(Ns, K_cg / K_pcg):
+        ax.annotate(f"{ratio:.1f}", (N, ratio), textcoords="offset points",
+                    xytext=(0, -16), ha="center", fontsize=10)
+    ax.set_xticks(Ns, [str(N) for N in Ns])
+    ax.minorticks_off()
+    ax.set_ylim(0, 1.15 * (K_cg / K_pcg).max())
+    ax.set_xlabel(r"$N=1/h$")
+    ax.set_ylabel(r"$\dfrac{K_{\mathrm{CG}}}{K_{\mathrm{PCG}}}$", rotation=0, ha="right", va="center")
+    out = os.path.join(FIG_DIR, "iteration_ratio.pdf")
+    fig.savefig(out)
+    plt.close(fig)
+    print(f"Figure saved to {os.path.normpath(out)}")
+
+    # ---------- CPU time: total and per iteration ----------
+    ns = np.array([r[1] for r in results["CG"]])
+    T = {m: np.array([r[3] for r in results[m]]) for m in methods}
+    K = {"CG": K_cg, "SSOR-PCG": K_pcg}
+    markers = {"CG": "o-", "SSOR-PCG": "s-"}
+
+    fig, ax = plt.subplots(figsize=(4.0, 2.6))
+    for m in methods:
+        ax.loglog(ns, T[m], markers[m], label=m)
+    ax.loglog(ns, T["CG"][-1] * (ns / ns[-1]) ** 1.5, "k--", lw=1, label=r"$\mathcal{O}(n^{3/2})$")
+    ax.set_xlabel(r"$n$")
+    ax.set_ylabel("time [s]")
+    ax.legend(fontsize=10)
+    out = os.path.join(FIG_DIR, "time_vs_n.pdf")
+    fig.savefig(out)
+    plt.close(fig)
+    print(f"Figure saved to {os.path.normpath(out)}")
+
+    fig, ax = plt.subplots(figsize=(4.0, 2.6))
+    for m in methods:
+        ax.loglog(ns, 1e3 * T[m] / K[m], markers[m], label=m)
+    ax.loglog(ns, 1e3 * T["SSOR-PCG"][-1] / K_pcg[-1] * ns / ns[-1], "k--", lw=1, label=r"$\mathcal{O}(n)$")
+    ax.loglog(ns, 1e3 * T["CG"][-1] / K_cg[-1] * ns / ns[-1], "k--", lw=1)
+    ax.set_xlabel(r"$n$")
+    ax.set_ylabel("time / iteration [ms]")
+    ax.legend(fontsize=10)
+    out = os.path.join(FIG_DIR, "time_per_iteration.pdf")
+    fig.savefig(out)
+    plt.close(fig)
+    print(f"Figure saved to {os.path.normpath(out)}")
 
 if __name__ == "__main__":
     main()
